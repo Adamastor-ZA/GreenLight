@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GreenLight — Course Status</title>
+  <meta name="description" content="Real-time hole availability for golf estates — know what's open before you head out." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green-900: #0d2b1a;
+      --green-700: #1a5c35;
+      --green-500: #2d9e6b;
+      --green-100: #dcf5e8;
+      --green-50:  #f0faf5;
+      --text:      #1a1a1a;
+      --text-2:    #555555;
+      --text-3:    #888888;
+      --bg:        #ffffff;
+      --bg-2:      #f7f7f5;
+      --bg-3:      #efefec;
+      --border:    #e0e0db;
+      --border-2:  #c8c8c2;
+      --avail-bg:  #dcf5e8;
+      --avail-tx:  #176338;
+      --avail-bd:  #a8dfc0;
+      --occup-bg:  #fde8e8;
+      --occup-tx:  #c0392b;
+      --occup-bd:  #f5b8b4;
+      --soon-bg:   #fef3cd;
+      --soon-tx:   #8a6200;
+      --soon-bd:   #f5d98a;
+      --info-bg:   #e8f0fe;
+      --info-tx:   #1a56b0;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text:     #f0f0ec;
+        --text-2:   #aaaaaa;
+        --text-3:   #777777;
+        --bg:       #181816;
+        --bg-2:     #222220;
+        --bg-3:     #2a2a28;
+        --border:   #333330;
+        --border-2: #444440;
+        --avail-bg: #0f2e1c;
+        --avail-tx: #5cd68a;
+        --avail-bd: #1a5c35;
+        --occup-bg: #2e0f0f;
+        --occup-tx: #f08080;
+        --occup-bd: #5c1a1a;
+        --soon-bg:  #2e2000;
+        --soon-tx:  #f0c040;
+        --soon-bd:  #5c4000;
+        --info-bg:  #0f1e3a;
+        --info-tx:  #80a8f0;
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg-2);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 15px;
+    }
+
+    /* ── Top bar ───────────────────────────────────────────── */
+    .topbar {
+      background: var(--green-900);
+      color: #fff;
+      padding: 0 1.25rem;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: #fff;
+    }
+    .logo-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--green-500);
+      flex-shrink: 0;
+    }
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .clock-top {
+      font-size: 15px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      color: rgba(255,255,255,0.85);
+    }
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: var(--green-500);
+      font-weight: 500;
+    }
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green-500);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* ── Page shell ────────────────────────────────────────── */
+    .page {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 1.25rem 1rem 3rem;
+    }
+
+    .date-row {
+      font-size: 12px;
+      color: var(--text-3);
+      margin-bottom: 1.25rem;
+    }
+
+    /* ── Tabs ──────────────────────────────────────────────── */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 1.25rem;
+      background: var(--bg-3);
+      padding: 3px;
+      border-radius: var(--radius-md);
+      width: fit-content;
+    }
+    .tab {
+      padding: 6px 18px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      cursor: pointer;
+      background: transparent;
+      color: var(--text-2);
+      font-weight: 400;
+      transition: background 0.15s, color 0.15s;
+    }
+    .tab.active {
+      background: var(--bg);
+      color: var(--text);
+      font-weight: 500;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    /* ── Summary cards ─────────────────────────────────────── */
+    .summary-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 8px;
+      margin-bottom: 1.25rem;
+    }
+    .stat {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px 12px;
+    }
+    .stat-lbl { font-size: 11px; color: var(--text-3); margin-bottom: 4px; }
+    .stat-val { font-size: 22px; font-weight: 600; line-height: 1; }
+    .c-green  { color: var(--avail-tx); }
+    .c-red    { color: var(--occup-tx); }
+    .c-amber  { color: var(--soon-tx);  }
+
+    /* ── Course grid ───────────────────────────────────────── */
+    .nine-lbl {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-3);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 7px;
+    }
+    .hole-grid {
+      display: grid;
+      grid-template-columns: repeat(9, minmax(0,1fr));
+      gap: 6px;
+      margin-bottom: 1.25rem;
+    }
+    .hole {
+      padding: 8px 2px;
+      border-radius: var(--radius-md);
+      border: 0.5px solid transparent;
+      cursor: pointer;
+      text-align: center;
+      transition: transform 0.1s, box-shadow 0.1s;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .hole:active { transform: scale(0.96); }
+    .hole.available { background: var(--avail-bg); border-color: var(--avail-bd); }
+    .hole.occupied  { background: var(--occup-bg); border-color: var(--occup-bd); }
+    .hole.upcoming  { background: var(--soon-bg);  border-color: var(--soon-bd);  }
+    .hole.selected  { outline: 2px solid var(--green-500); outline-offset: 2px; }
+    .hole-num { font-size: 13px; font-weight: 600; }
+    .hole.available .hole-num { color: var(--avail-tx); }
+    .hole.occupied  .hole-num { color: var(--occup-tx); }
+    .hole.upcoming  .hole-num { color: var(--soon-tx);  }
+    .hole-lbl { font-size: 9px; margin-top: 2px; }
+    .hole.available .hole-lbl { color: var(--avail-tx); }
+    .hole.occupied  .hole-lbl { color: var(--occup-tx); }
+    .hole.upcoming  .hole-lbl { color: var(--soon-tx);  }
+
+    /* ── Legend ────────────────────────────────────────────── */
+    .legend {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+    .leg { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Detail panel ──────────────────────────────────────── */
+    .detail-panel {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .detail-panel h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+    .detail-panel p  { font-size: 13px; color: var(--text-2); margin-bottom: 5px; line-height: 1.5; }
+    .detail-panel strong { color: var(--text); font-weight: 600; }
+
+    /* ── Pace slider ───────────────────────────────────────── */
+    .pace-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 1.25rem;
+      font-size: 13px;
+      color: var(--text-2);
+    }
+    .pace-row input[type=range] { flex: 1; max-width: 140px; cursor: pointer; }
+    .pace-val { font-weight: 600; color: var(--text); min-width: 80px; }
+
+    .hint-txt { font-size: 11px; color: var(--text-3); line-height: 1.5; }
+
+    /* ── Tee sheet list ────────────────────────────────────── */
+    .tee-list {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: 1.25rem;
+    }
+    .tee-hdr, .tee-row {
+      display: grid;
+      grid-template-columns: 58px 58px 1fr 44px 72px 28px;
+      gap: 6px;
+      align-items: center;
+      padding: 9px 12px;
+    }
+    .tee-hdr {
+      background: var(--bg-2);
+      font-size: 11px;
+      color: var(--text-3);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      border-bottom: 0.5px solid var(--border);
+    }
+    .tee-row {
+      font-size: 13px;
+      border-bottom: 0.5px solid var(--border);
+    }
+    .tee-row:last-child { border-bottom: none; }
+    .tee-row span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .badge {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 99px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .b-active { background: var(--occup-bg); color: var(--occup-tx); }
+    .b-soon   { background: var(--soon-bg);  color: var(--soon-tx);  }
+    .b-later  { background: var(--info-bg);  color: var(--info-tx);  }
+    .b-done   { background: var(--bg-3);     color: var(--text-3);   }
+    .del-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-3);
+      font-size: 18px;
+      line-height: 1;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .del-btn:hover { color: var(--occup-tx); }
+    .empty-state { padding: 2rem; text-align: center; font-size: 13px; color: var(--text-3); }
+
+    /* ── Add booking form ──────────────────────────────────── */
+    .sect-title { font-size: 13px; font-weight: 600; color: var(--text-2); margin-bottom: 8px; letter-spacing: 0.02em; }
+    .add-form {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .fgrid-4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; margin-bottom: 10px; }
+    .fgrid-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-bottom: 10px; }
+    .fg label { font-size: 11px; color: var(--text-3); display: block; margin-bottom: 4px; font-weight: 500; }
+    .fg input, .fg select {
+      width: 100%;
+      padding: 7px 9px;
+      border: 0.5px solid var(--border-2);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      background: var(--bg-2);
+      color: var(--text);
+      outline: none;
+      font-family: inherit;
+    }
+    .fg input:focus, .fg select:focus { border-color: var(--green-500); box-shadow: 0 0 0 2px rgba(45,158,107,0.15); }
+
+    .btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .btn {
+      padding: 7px 16px;
+      border: 0.5px solid var(--border-2);
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      cursor: pointer;
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-weight: 500;
+      transition: background 0.1s;
+    }
+    .btn:hover { background: var(--bg-2); }
+    .btn-primary { background: var(--green-700); color: #fff; border-color: var(--green-700); }
+    .btn-primary:hover { background: var(--green-900); border-color: var(--green-900); }
+    .btn-danger { color: var(--occup-tx); border-color: var(--occup-bd); }
+    .btn-danger:hover { background: var(--occup-bg); }
+
+    .import-box { margin-top: 12px; padding-top: 12px; border-top: 0.5px solid var(--border); }
+    .import-box textarea {
+      width: 100%;
+      height: 90px;
+      resize: vertical;
+      font-size: 12px;
+      font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+      padding: 8px 10px;
+      border: 0.5px solid var(--border-2);
+      border-radius: var(--radius-sm);
+      background: var(--bg-2);
+      color: var(--text);
+      outline: none;
+      margin-bottom: 6px;
+    }
+    .import-box textarea:focus { border-color: var(--green-500); }
+
+    /* ── Footer ────────────────────────────────────────────── */
+    .footer {
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-3);
+      padding-top: 2rem;
+      border-top: 0.5px solid var(--border);
+      margin-top: 1rem;
+    }
+    .footer a { color: var(--green-500); text-decoration: none; }
+
+    /* ── Responsive ────────────────────────────────────────── */
+    @media (max-width: 480px) {
+      .summary-row { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .fgrid-4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .tee-hdr, .tee-row { grid-template-columns: 52px 52px 1fr 36px 60px 24px; font-size: 12px; padding: 8px 10px; gap: 4px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-dot"></div>
+      GreenLight
+    </div>
+    <div class="topbar-right">
+      <div class="live-badge"><div class="live-dot"></div>Live</div>
+      <div class="clock-top" id="clock">--:--</div>
+    </div>
+  </div>
+
+  <div class="page">
+
+    <div class="date-row" id="date-str"></div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('resident')">Resident view</button>
+      <button class="tab" onclick="switchTab('management')">Management</button>
+    </div>
+
+    <!-- ── Resident view ── -->
+    <div id="resident-view">
+
+      <div class="summary-row" id="summary-row"></div>
+
+      <div class="nine-lbl">Front nine — holes 1–9</div>
+      <div class="hole-grid" id="front-nine"></div>
+
+      <div class="nine-lbl">Back nine — holes 10–18</div>
+      <div class="hole-grid" id="back-nine"></div>
+
+      <div class="legend">
+        <div class="leg"><div class="dot" style="background:var(--avail-tx)"></div>Available</div>
+        <div class="leg"><div class="dot" style="background:var(--occup-tx)"></div>Golfers on hole</div>
+        <div class="leg"><div class="dot" style="background:var(--soon-tx)"></div>Golfers approaching (&lt;30 min)</div>
+      </div>
+
+      <div id="detail-panel" class="detail-panel" style="display:none"></div>
+
+      <div class="pace-row">
+        <span>Pace of play:</span>
+        <input type="range" min="8" max="20" step="1" id="pace-slider" value="12" oninput="setPace(this.value)" />
+        <span class="pace-val" id="pace-val">12 min / hole</span>
+      </div>
+
+      <p class="hint-txt">Tap any hole for details. Page refreshes automatically every minute.<br>Adjust pace of play to match current course conditions.</p>
+
+    </div>
+
+    <!-- ── Management view ── -->
+    <div id="management-view" style="display:none">
+
+      <div class="sect-title">Today's tee sheet</div>
+      <div class="tee-list" id="tee-list"></div>
+
+      <div class="sect-title">Add booking</div>
+      <div class="add-form">
+        <div class="fgrid-4">
+          <div class="fg"><label>Date</label><input type="date" id="f-date" /></div>
+          <div class="fg"><label>Tee time</label><input type="time" id="f-time" value="08:00" /></div>
+          <div class="fg"><label>Starting hole</label><select id="f-hole"></select></div>
+          <div class="fg"><label>Holes to play</label>
+            <select id="f-holes">
+              <option value="9">9 holes</option>
+              <option value="18" selected>18 holes</option>
+            </select>
+          </div>
+        </div>
+        <div class="fgrid-2">
+          <div class="fg"><label>Group name (optional)</label><input type="text" id="f-name" placeholder="e.g. Smith family" /></div>
+          <div class="fg"><label>Group size</label><input type="number" id="f-size" min="1" max="4" value="4" /></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="addBooking()">Add booking</button>
+          <button class="btn" onclick="toggleImport()">Paste tee sheet</button>
+        </div>
+
+        <div class="import-box" id="import-box" style="display:none">
+          <p style="font-size:12px; color:var(--text-2); margin-bottom:8px;">
+            Paste one booking per line in CSV format:<br>
+            <code style="font-size:11px; color:var(--text-3)">date, time, starting hole, holes, group name, group size</code>
+          </p>
+          <textarea id="import-text" placeholder="2026-04-14,07:00,1,18,Smith family,4&#10;2026-04-14,07:12,1,18,Jones group,3&#10;2026-04-14,08:30,10,9,Anderson 4ball,4"></textarea>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="importSheet()">Import</button>
+            <span class="hint-txt">Dates: YYYY-MM-DD · Times: HH:MM (24 hr) · Holes: 9 or 18</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row" style="margin-bottom:2rem">
+        <button class="btn btn-danger" onclick="clearToday()">Clear today's bookings</button>
+      </div>
+
+    </div>
+
+    <div class="footer">
+      GreenLight &mdash; real-time course availability &nbsp;·&nbsp;
+      <span id="last-upd"></span>
+    </div>
+
+  </div>
+
+  <script>
+    var bookings = [];
+    var pace = 12;
+    var selectedHole = null;
+
+    function getToday() { return new Date().toISOString().split('T')[0]; }
+
+    function nowMins() {
+      var n = new Date();
+      return n.getHours() * 60 + n.getMinutes();
+    }
+
+    function toMins(t) {
+      var parts = t.split(':');
+      return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+    }
+
+    function toTime(m) {
+      m = ((m % 1440) + 1440) % 1440;
+      return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+    }
+
+    function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+    function loadBookings() {
+      try {
+        var raw = localStorage.getItem('gl_bookings_' + getToday());
+        if (raw) { bookings = JSON.parse(raw); }
+        else { bookings = makeSample(); }
+      } catch (e) { bookings = makeSample(); }
+      render();
+    }
+
+    function saveBookings() {
+      try { localStorage.setItem('gl_bookings_' + getToday(), JSON.stringify(bookings)); } catch (e) {}
+    }
+
+    function makeSample() {
+      var d = getToday();
+      var n = nowMins();
+      function t(delta) { return toTime(n + delta); }
+      return [
+        { id: uid(), date: d, teeTime: t(-110), startingHole: 1,  holes: 18, groupName: 'Smith family',     groupSize: 4 },
+        { id: uid(), date: d, teeTime: t(-95),  startingHole: 1,  holes: 18, groupName: 'Jones group',      groupSize: 3 },
+        { id: uid(), date: d, teeTime: t(-30),  startingHole: 10, holes: 9,  groupName: 'Anderson 4ball',   groupSize: 4 },
+        { id: uid(), date: d, teeTime: t(20),   startingHole: 1,  holes: 18, groupName: 'Estate committee', groupSize: 2 },
+        { id: uid(), date: d, teeTime: t(50),   startingHole: 1,  holes: 18, groupName: 'Wednesday club',   groupSize: 4 },
+      ];
+    }
+
+    function bookingStatus(b) {
+      var s = toMins(b.teeTime), e = s + b.holes * pace, n = nowMins();
+      if (n < s) return 'waiting';
+      if (n > e) return 'done';
+      return 'active';
+    }
+
+    function currentHole(b) {
+      var s = toMins(b.teeTime), n = nowMins();
+      if (n < s) return null;
+      var done = Math.floor((n - s) / pace);
+      if (done >= b.holes) return null;
+      return ((b.startingHole - 1 + done) % 18) + 1;
+    }
+
+    function holeStatuses() {
+      var st = {};
+      for (var i = 1; i <= 18; i++) st[i] = { status: 'available', groups: [] };
+      var today = bookings.filter(function(b) { return b.date === getToday(); });
+      var now = nowMins();
+
+      today.forEach(function(b) {
+        var s = toMins(b.teeTime), e = s + b.holes * pace;
+        if (now > e) return;
+        if (now >= s) {
+          var ch = currentHole(b);
+          if (ch && st[ch]) {
+            st[ch].status = 'occupied';
+            st[ch].groups.push(Object.assign({}, b, { onHole: ch, estClear: toTime(e) }));
+          }
+        } else {
+          var wait = s - now;
+          if (wait <= 30) {
+            var h = b.startingHole;
+            if (st[h] && st[h].status !== 'occupied') {
+              st[h].status = 'upcoming';
+              st[h].groups.push(Object.assign({}, b, { onHole: h, estClear: toTime(e), minsAway: wait }));
+            }
+          }
+        }
+      });
+      return st;
+    }
+
+    function render() {
+      updateClock();
+      renderSummary();
+      renderHoles();
+      if (document.getElementById('management-view').style.display !== 'none') renderTeeList();
+      if (selectedHole !== null) renderDetail(selectedHole);
+    }
+
+    function updateClock() {
+      var n = new Date();
+      document.getElementById('clock').textContent =
+        String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0');
+      document.getElementById('date-str').textContent =
+        n.toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      document.getElementById('last-upd').textContent =
+        'Last updated ' + n.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function renderSummary() {
+      var hs = holeStatuses();
+      var vals = Object.values(hs);
+      var avail  = vals.filter(function(h) { return h.status === 'available'; }).length;
+      var occ    = vals.filter(function(h) { return h.status === 'occupied';  }).length;
+      var soon   = vals.filter(function(h) { return h.status === 'upcoming';  }).length;
+      var active = bookings.filter(function(b) { return b.date === getToday() && bookingStatus(b) === 'active'; }).length;
+      document.getElementById('summary-row').innerHTML =
+        '<div class="stat"><div class="stat-lbl">Available now</div><div class="stat-val c-green">' + avail + '</div></div>' +
+        '<div class="stat"><div class="stat-lbl">In use</div><div class="stat-val c-red">' + occ + '</div></div>' +
+        '<div class="stat"><div class="stat-lbl">Approaching</div><div class="stat-val c-amber">' + soon + '</div></div>' +
+        '<div class="stat"><div class="stat-lbl">Active groups</div><div class="stat-val">' + active + '</div></div>';
+    }
+
+    function renderHoles() {
+      var hs = holeStatuses();
+      var labels = { available: 'Free', occupied: 'In use', upcoming: 'Soon' };
+      function mkHole(n) {
+        var h = hs[n];
+        var sel = selectedHole === n ? ' selected' : '';
+        return '<div class="hole ' + h.status + sel + '" onclick="clickHole(' + n + ')" title="Hole ' + n + '">' +
+          '<div class="hole-num">' + n + '</div>' +
+          '<div class="hole-lbl">' + labels[h.status] + '</div>' +
+          '</div>';
+      }
+      var f = '', b = '';
+      for (var i = 1;  i <= 9;  i++) f += mkHole(i);
+      for (var j = 10; j <= 18; j++) b += mkHole(j);
+      document.getElementById('front-nine').innerHTML = f;
+      document.getElementById('back-nine').innerHTML  = b;
+    }
+
+    function clickHole(n) {
+      if (selectedHole === n) {
+        selectedHole = null;
+        document.getElementById('detail-panel').style.display = 'none';
+      } else {
+        selectedHole = n;
+        renderDetail(n);
+        document.getElementById('detail-panel').style.display = 'block';
+      }
+      renderHoles();
+    }
+
+    function renderDetail(n) {
+      var hs = holeStatuses();
+      var h  = hs[n];
+      var el = document.getElementById('detail-panel');
+      var html = '<h3>Hole ' + n + '</h3>';
+
+      if (h.status === 'available') {
+        html += '<p style="color:var(--avail-tx); font-weight:600; margin-bottom:6px;">Available for non-golfing use</p>';
+        var next = bookings
+          .filter(function(b) { return b.date === getToday() && bookingStatus(b) === 'waiting'; })
+          .sort(function(a, b) { return a.teeTime.localeCompare(b.teeTime); })
+          .find(function(b) {
+            var holesPlayed = [];
+            for (var i = 0; i < b.holes; i++) holesPlayed.push(((b.startingHole - 1 + i) % 18) + 1);
+            return holesPlayed.indexOf(n) !== -1;
+          });
+        if (next) {
+          var wait = toMins(next.teeTime) - nowMins();
+          html += '<p>Next booking: <strong>' + next.teeTime + '</strong>' +
+            (next.groupName ? ' — ' + next.groupName : '') +
+            ' (in ' + wait + ' min)</p>';
+        } else {
+          html += '<p>No further bookings scheduled today.</p>';
+        }
+
+      } else if (h.status === 'occupied') {
+        html += '<p style="color:var(--occup-tx); font-weight:600; margin-bottom:6px;">Golfers currently on hole</p>';
+        h.groups.forEach(function(g) {
+          html += '<p><strong>' + (g.groupName || 'Group') + '</strong> &middot; ' + g.groupSize + ' player' + (g.groupSize !== 1 ? 's' : '') + '</p>';
+          html += '<p>Estimated clear: <strong>' + g.estClear + '</strong></p>';
+        });
+
+      } else {
+        html += '<p style="color:var(--soon-tx); font-weight:600; margin-bottom:6px;">Golfers approaching</p>';
+        h.groups.forEach(function(g) {
+          html += '<p><strong>' + (g.groupName || 'Group') + '</strong> arrives in approx. ' + g.minsAway + ' min (tee time ' + g.teeTime + ')</p>';
+        });
+      }
+
+      el.innerHTML = html;
+    }
+
+    function renderTeeList() {
+      var el = document.getElementById('tee-list');
+      if (!el) return;
+      var today = bookings
+        .filter(function(b) { return b.date === getToday(); })
+        .slice()
+        .sort(function(a, b) { return a.teeTime.localeCompare(b.teeTime); });
+
+      function badge(b) {
+        var s = bookingStatus(b);
+        if (s === 'active')   return '<span class="badge b-active">Active</span>';
+        if (s === 'waiting')  return '<span class="badge b-later">Upcoming</span>';
+        return '<span class="badge b-done">Done</span>';
+      }
+
+      var html = '<div class="tee-hdr"><span>Time</span><span>Hole</span><span>Group</span><span>Holes</span><span>Status</span><span></span></div>';
+      if (!today.length) {
+        html += '<div class="empty-state">No bookings today. Add one below or paste a tee sheet.</div>';
+      } else {
+        today.forEach(function(b) {
+          html += '<div class="tee-row">' +
+            '<span>' + b.teeTime + '</span>' +
+            '<span>Hole ' + b.startingHole + '</span>' +
+            '<span>' + (b.groupName || '—') + '</span>' +
+            '<span>' + b.holes + '</span>' +
+            '<span>' + badge(b) + '</span>' +
+            '<span><button class="del-btn" onclick="deleteBk(\'' + b.id + '\')" title="Remove">&times;</button></span>' +
+            '</div>';
+        });
+      }
+      el.innerHTML = html;
+    }
+
+    function initForm() {
+      var sel = document.getElementById('f-hole');
+      if (!sel || sel.options.length > 0) return;
+      for (var i = 1; i <= 18; i++) {
+        var opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = 'Hole ' + i;
+        sel.appendChild(opt);
+      }
+      document.getElementById('f-date').value = getToday();
+    }
+
+    function addBooking() {
+      var date         = document.getElementById('f-date').value;
+      var teeTime      = document.getElementById('f-time').value;
+      var startingHole = parseInt(document.getElementById('f-hole').value);
+      var holes        = parseInt(document.getElementById('f-holes').value);
+      var groupName    = document.getElementById('f-name').value.trim();
+      var groupSize    = parseInt(document.getElementById('f-size').value) || 4;
+      if (!date || !teeTime || !startingHole) { alert('Please fill in date, tee time and starting hole.'); return; }
+      bookings.push({ id: uid(), date: date, teeTime: teeTime, startingHole: startingHole, holes: holes, groupName: groupName, groupSize: groupSize });
+      saveBookings();
+      render();
+      document.getElementById('f-name').value = '';
+    }
+
+    function deleteBk(id) {
+      bookings = bookings.filter(function(b) { return b.id !== id; });
+      saveBookings();
+      render();
+    }
+
+    function clearToday() {
+      if (!confirm('Remove all of today\'s bookings?')) return;
+      bookings = bookings.filter(function(b) { return b.date !== getToday(); });
+      saveBookings();
+      render();
+    }
+
+    function toggleImport() {
+      var el = document.getElementById('import-box');
+      el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function importSheet() {
+      var lines = document.getElementById('import-text').value
+        .trim().split('\n')
+        .filter(function(l) { return l.trim() && !l.startsWith('#'); });
+      var added = 0;
+      lines.forEach(function(line) {
+        var p = line.split(',').map(function(s) { return s.trim(); });
+        if (p.length < 2 || !p[0] || !p[1]) return;
+        bookings.push({
+          id: uid(),
+          date: p[0],
+          teeTime: p[1],
+          startingHole: parseInt(p[2]) || 1,
+          holes: parseInt(p[3]) || 18,
+          groupName: p[4] || '',
+          groupSize: parseInt(p[5]) || 4
+        });
+        added++;
+      });
+      if (added) {
+        saveBookings();
+        render();
+        document.getElementById('import-text').value = '';
+        document.getElementById('import-box').style.display = 'none';
+        alert(added + ' booking' + (added > 1 ? 's' : '') + ' imported successfully.');
+      } else {
+        alert('No valid lines found. Check the format and try again.');
+      }
+    }
+
+    function setPace(v) {
+      pace = parseInt(v);
+      document.getElementById('pace-val').textContent = v + ' min / hole';
+      render();
+    }
+
+    function switchTab(tab) {
+      document.getElementById('resident-view').style.display    = tab === 'resident'   ? 'block' : 'none';
+      document.getElementById('management-view').style.display  = tab === 'management' ? 'block' : 'none';
+      document.querySelectorAll('.tab').forEach(function(el, i) {
+        el.classList.toggle('active', (i === 0 && tab === 'resident') || (i === 1 && tab === 'management'));
+      });
+      if (tab === 'management') { initForm(); renderTeeList(); }
+    }
+
+    initForm();
+    loadBookings();
+    setInterval(render, 60000);
+    setInterval(updateClock, 1000);
+  </script>
+
+</body>
+</html>
